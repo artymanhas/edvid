@@ -34,10 +34,43 @@ approved. Everything here rides on the **data-driven template** at
 - **Zones:** inserts/graphics upper third, captions lower third, face clear.
   Minimalist; accent `#33e0a3`.
 - **Audio:** whoosh ~0.09 on card entrances, pop ~0.12 on shapes, music ~0.0445,
-  and ALWAYS a final loudnorm pass (voice+music+SFX summed will clip). The
-  shared sfx pack (`public/sfx/`) also ships `click1`/`click2` (element pops) and
-  `tictac` (clocks/countdowns) — trigger any at a local frame by wrapping
-  `<Sfx src="click2.mp3" volume={0.7}/>` in a `<Sequence from={frame} layout="none">`.
+  and ALWAYS a final loudnorm pass (voice+music+SFX summed will clip). Place
+  ANY pack sound at ANY moment via `sfxCues` in edit-data.json — no code
+  change needed (see the schema in `README.md` and `SfxCues` in
+  `CustomGraphics.tsx`); this is the general-purpose placement, separate from
+  each transition's own baked-in signature sound (below).
+
+### SFX pack (`public/sfx/`) — every file is code, not a download
+
+All procedurally synthesized (`generate_sfx.py`, numpy DSP — no external
+files, no licensing question, same policy the whole project follows).
+Peaks measured with `ffmpeg -i <file> -af volumedetect -f null -`; **always
+check a new/unfamiliar one this way before trusting it** — `click2.mp3` sat
+at −25 dB for a long time (inaudible under any speech; fixed 2026-09-04, +22dB
+gain, now −3.1dB).
+
+| File | Peak | Duration | Baked into | Also usable via `sfxCues` |
+|---|---|---|---|---|
+| `whoosh.mp3` | −2.3dB | 0.45s | card/graphic entrances (hardcoded, `volume` ~0.09-0.1) | yes |
+| `pop.mp3` | −4.1dB | 0.14s | shape pops (hardcoded, `volume` 0.12) | yes |
+| `click.mp3` | −4.9dB | 0.03s | — | yes (generic short click) |
+| `click1.mp3` | −11.3dB | 0.29s | — | yes (quieter click — raise `volume` prop to compensate) |
+| `click2.mp3` | −3.1dB | 0.37s | — | yes |
+| `cut-click.mp3` | −2.0dB | 0.06s | flash transition (default `sfx`) | yes |
+| `caption-click.mp3` | −0.8dB | 0.41s | stacked caption solo-word click | no (needs the cue-index sync in `StackedCaptions.tsx`) |
+| `caption-scratch.mp3` | −0.5dB | 0.96s | stacked caption circled-word scratch | no (same) |
+| `tictac.mp3` | −13.7dB | 3.35s | — | yes (clocks/countdowns — it's long, trim the Sequence duration if used as a cue) |
+| `riser.mp3` | −3.0dB | 1.20s | — | yes (tension build-up, place a beat or two before a payoff) |
+| `impact.mp3` | −3.1dB | 0.35s | — | yes (bold text/stat reveals) |
+| `glitch.mp3` | −3.1dB | 0.26s | glitch transition (default `sfx`) | yes |
+| `lightleak.mp3` | −2.7dB | 0.90s | lightleak transition (default `sfx`) | yes |
+| `ding.mp3` | −3.3dB | 0.50s | — | yes (checkmarks/tips call-outs) |
+| `shutter.mp3` | −6.2dB | 0.12s | — | yes (photo-style inserts) |
+
+`generate_sfx.py` (no args) only adds sounds that don't exist yet; `--all`
+also re-rolls whoosh/pop/click, which are noise-based and unseeded, so a
+re-run changes their exact audio slightly — don't do that to already-tuned/
+in-production sounds without meaning to.
 
 ## Workflow
 
@@ -56,7 +89,7 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 | `elements.tracking` | `face_track.py` + `track.json`; OFF → skip it, fixed frame |
 | `elements.zoomAuto` | the slow push-in inside each segment (`+0.04/segment`) |
 | `elements.zoomCuts` | the hard zoom change ON each cut (~1.10–1.22, cycles) |
-| `elements.flashCut` | `transitions[]` in edit-data.json — see "Flash na transição" |
+| `transition` | `transitions[]` entries' `type` in edit-data.json — see "Transições nos cortes" |
 | `elements.musicAI` | Phase 3 via `treblo_music.py`; OFF → deliver with voice only |
 | `note` | free text — read it, it overrides the defaults above |
 
@@ -309,40 +342,91 @@ pick, then render ONE still for design approval before the full render.
 that wants the same zone to after `hook.endSec` (e.g. move a 2.5s cutaway to
 ~4.1s).
 
-## Flash na transição (`elements.flashCut`)
+## Transições nos cortes (`transition` na aba Estilo)
 
-A light beam whips across the frame with a bloom and a dry click. Data-driven:
-one entry per cut in `transitions[]`, `at` being the cut time **exactly as
-segments.json states it** — `VIDEO_LAG` lines it up with the frame the picture
-changes on, same as the split windows. Never index it off its own clock.
+Três visuais sobre o MESMO mecanismo de gatilho: um item em `transitions[]`,
+`at` sendo o tempo do corte **exatamente como o segments.json declara** —
+`VIDEO_LAG` alinha com o frame em que a imagem realmente muda, igual as
+janelas do split. Nunca indexar pelo próprio relógio do efeito.
 
 ```json
-"transitions": [{"at": 11.7}]
+"transitions": [{"at": 11.7, "type": "flash"}]
 ```
 
-Default placement when the element is ON: **one per split-insert entry, not per
-cut.** The video has ~27 cuts; a flash on each one stops reading as an accent and
-starts reading as a strobe. Put it where the layout changes, which is where the
-transition means something. Optional per entry: `intensity` (default 1), `sfx`,
-`volume`.
+`type` ausente = `"flash"` (compatibilidade com projetos de antes de
+2026-09-04, quando só existia esse). Campos opcionais em qualquer entrada:
+`intensity` (default 1), `sfx` (troca o som assinatura do tipo), `volume`.
 
-- **The beam LEADS the cut by 2 frames.** Starting it on the cut frame reads as a
-  flash after the fact — the eye sees the picture change, then the light. Leading
-  it makes the light look like the cause.
-- **Blur is what separates a beam from a wash.** At 26px it read as a general
-  brightening; 16px reads as a beam. Raise opacity and lower blur together.
-- **CHECK THE SFX FILE BEFORE TRUSTING IT.** The pack's `click2.mp3` peaks at
-  −25 dB — it is inaudible under speech at any sane volume, and the mix looks
-  fine while nothing is heard. `ffmpeg -i <sfx> -af volumedetect -f null -` is
-  the check. `cut-click.mp3` (−2 dB, 57ms) is the one that reads.
-- **And check WHERE the transient sits inside the file.** The source this click
-  came from had 180ms of silence before the hit; delayed to the cut it would have
-  landed 180ms late — after a 230ms effect had already finished. Trim the lead-in
-  so the transient is at t=0, then delay by the cut time.
-- **The delivered click is mixed by ffmpeg, not by Remotion.** The delivery
-  re-mux discards Remotion's audio (it drifts), so add the SFX as another input
-  with `adelay=<frame/fps*1000>`. The `<Sfx>` in the component only sounds in a
-  plain `remotion render`.
+**Colocação padrão, pros três:** um por corte de LAYOUT (ex.: um por
+split-insert), não por corte de plano. O vídeo típico tem ~27 cortes; um
+efeito em cada um deixa de ler como acento e passa a ler como estroboscópio.
+
+Restrição de arquitetura que vale pros três: `CustomGraphics` é uma camada
+OVERLAY, irmã de `DynamicVideo` (a camada de vídeo), não uma que a envolve —
+nenhum dos três pode literalmente mover/zoomar a imagem por baixo. Todos são
+desenhados por cima, com `interpolate`/`AbsoluteFill`/blend mode — nada disso
+toca `Main.tsx`.
+
+### Flash (o original)
+
+Um feixe de luz varre o quadro com um bloom e um clique seco.
+
+- **O feixe LIDERA o corte em 2 frames.** Começar no frame do corte lê como um
+  flash depois do fato — o olho vê a imagem mudar, depois a luz. Liderar faz a
+  luz parecer a causa.
+- **Blur é o que separa um feixe de um clarão genérico.** A 26px lia como
+  clareamento geral; 16px lê como feixe. Suba opacidade e desça blur juntos.
+
+### Glitch
+
+Stutter digital de ~5-6 frames: faixas horizontais finas com tingimento RGB
+(blend `difference`) e jitter leve, mais a textura de ruído
+(`public/fx/noise.png`, gerada por `generate_fx.py` — procedural, sem
+licença) piscando por cima.
+
+- **Determinístico, nunca `Math.random()`.** O Remotion pode renderizar
+  frames fora de ordem ou em paralelo, então qualquer coisa que pareça
+  aleatória precisa ser função pura do frame — mesma regra da legenda
+  `scatter`. As faixas são hasheadas por (frame do corte, índice da faixa,
+  sub-passo) — `hash01()` em `CustomGraphics.tsx`.
+- **É um efeito de overlay, não channel-split de verdade.** Sem acesso aos
+  pixels do vídeo, as faixas tingidas simulam corrupção visual — não deslocam
+  o vídeo de fato. Suficiente pro efeito; não confundir com um plugin de RGB
+  split real.
+- Janela curta (7 frames, ~230ms, igual o flash) — um glitch longo lê como
+  travamento, não como corte.
+
+### Vazamento de luz (light-leak / film burn)
+
+Varredura radial quente (âmbar), mais lenta e orgânica que o flash — janela de
+16 frames (~530ms) em vez de 7.
+
+- **Mais lento é o ponto.** Um flash rápido em âmbar lê como erro de cor, não
+  como vazamento de luz de verdade — a organicidade vem do tempo, não só da
+  cor.
+- Mesma textura de ruído do glitch, em opacidade bem mais baixa (grão, não
+  estática).
+
+### SFX das transições — cheque antes de confiar
+
+Cada tipo tem um som assinatura (`cut-click.mp3` / `glitch.mp3` /
+`lightleak.mp3`), tocado sozinho a menos que a entrada passe `sfx`.
+**Sempre confira o pico com `ffmpeg -i <sfx> -af volumedetect -f null -`
+antes de confiar num arquivo novo/desconhecido** — a lição deste projeto:
+`click2.mp3` ficou muito tempo no pack em −25 dB (inaudível sob qualquer
+voz, com a mixagem parecendo certa enquanto nada tocava); corrigido em
+2026-09-04 (+22dB de ganho, agora −3.1dB). Ver a tabela de SFX acima pro pico
+de cada arquivo do pack.
+
+**E confira ONDE o transiente fica dentro do arquivo.** Um clique com
+silêncio antes do hit, atrasado pro tempo do corte, chega atrasado de
+verdade — corte o lead-in pra o transiente ficar em t=0, depois atrase pelo
+tempo do corte.
+
+**O clique entregue é mixado por ffmpeg, não pelo Remotion.** O remux de
+entrega descarta o áudio do Remotion (ele desvia), então adicione o SFX como
+outro input com `adelay=<frame/fps*1000>`. O `<Sfx>` no componente só soa num
+`remotion render` puro.
 
 ## Style: "Limpa" (`edit: "limpa"`) — no split inserts
 
@@ -548,9 +632,14 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   lines, size fitted to the text (see the track reference).
 - **Estilo de legenda** — three animated (`karaoke`, `stacked`/"Empilhado",
   `scatter`/"Disperso") and three static (`simples`, `serifada`, `classica`).
+- **Transição nos cortes** — single-select, like edit/headline/captions above
+  (not a checkbox — `flashCut` used to be one, folded into this group
+  2026-09-04): `none`/"Nenhuma" (**default**), `flash`, `glitch`, `lightleak`/
+  "Vazamento de luz". Each option previews the real animation. See
+  "Transições nos cortes" below for placement + per-type tuning.
 - **Elementos da edição** — checkboxes: `tracking` (movimento de tracking),
   `zoomAuto` (automação de zoom in), `zoomCuts` (zoom in/out nos cortes),
-  `flashCut` (flash na transição), `musicAI` (trilha sonora com IA), plus a
+  `musicAI` (trilha sonora com IA), plus a
   free-text observation field.
 
 Saving writes `<edit>/preview_style.json` (its OWN file — a style pick and a

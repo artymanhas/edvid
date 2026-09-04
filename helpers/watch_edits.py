@@ -77,6 +77,12 @@ def style_digest(p: Path) -> str:
         f'  · headline: {d.get("headlineName") or d.get("headline")}',
         f'  · legenda: {d.get("captionsName") or d.get("captions")}',
     ]
+    # transition is a single-select group like edit/headline/captions above —
+    # not covered by the generic elements[] surfacing below — but 'none' is
+    # the default and not worth a line every time nothing was picked.
+    transition = d.get("transitionName") or d.get("transition")
+    if transition and d.get("transition") != "none":
+        out.append(f"  · transição nos cortes: {transition}")
     # Only worth reporting when the chosen styles actually paint an accent —
     # naming a colour that nothing uses reads as an instruction to go find a
     # place for it.

@@ -60,48 +60,112 @@ const LAYOUT = {
   bottom: {zoom: 1.0, focusY: 225},
 } as const;
 
-// A cut transition: a light beam whips across the frame while a short flash
-// blooms, with a click on the cut. Data, not JSX — `transitions` in
+// A cut transition — three visual TREATMENTS on one shared timing/trigger
+// mechanism. `type` picks the look; omitted `type` means 'flash' (the
+// original, only transition this template ever had, so old edit-data.json
+// files keep working unchanged). Data, not JSX — `transitions` in
 // edit-data.json — so the windows stay visible to the preview timeline and
 // retimeable without touching code.
-type CutFlash = {at: number; intensity?: number; sfx?: string; volume?: number};
+type Transition = {
+  at: number;
+  type?: 'flash' | 'glitch' | 'lightleak';
+  intensity?: number;
+  sfx?: string;
+  volume?: number;
+};
+
+// Generic SFX placement: any pack sound at any moment, no code change
+// needed — `sfxCues` in edit-data.json. The transitions above still carry
+// their OWN signature SFX baked in; this is the escape hatch for everything
+// else (a riser before a reveal, a shutter click on a photo insert...).
+type SfxCue = {at: number; src: string; volume?: number};
 
 export const CustomGraphics: React.FC = () => {
-  const d = editData as {splitInserts?: SplitInsert[]; transitions?: CutFlash[]};
+  const d = editData as {
+    splitInserts?: SplitInsert[];
+    transitions?: Transition[];
+    sfxCues?: SfxCue[];
+  };
   const splits = d.splitInserts ?? [];
-  const flashes = d.transitions ?? [];
+  const transitions = d.transitions ?? [];
+  const sfxCues = d.sfxCues ?? [];
   return (
     <>
       {splits.length ? <SplitScreen items={splits} /> : null}
-      {flashes.length ? <CutFlashes items={flashes} /> : null}
+      {transitions.length ? <CutTransitions items={transitions} /> : null}
+      {sfxCues.length ? <SfxCues items={sfxCues} /> : null}
     </>
   );
 };
 
-// ============ CUT FLASH =======================================================
-// Starts BEFORE the cut and peaks on it. A transition that begins on the cut
-// frame reads as a flash after the fact; leading it by two frames makes the
-// light look like the thing that caused the change.
-// `at` is the cut time exactly as segments.json states it — VIDEO_LAG lines it
-// up with the frame the picture actually changes on, same as the split windows.
-const FLASH_LEAD = 2; // frames before the cut
-const FLASH_LEN = 7; // total, ~230ms at 30fps
+// ============ CUT TRANSITIONS =================================================
+// Every look starts BEFORE the cut and peaks ON it — a transition that begins
+// on the cut frame reads as an effect after the fact; leading it makes the
+// effect look like the thing that caused the change. Same trigger/window
+// mechanism for all three; only the drawing (below) and each one's signature
+// SFX differ. `at` is the cut time exactly as segments.json states it —
+// VIDEO_LAG lines it up with the frame the picture actually changes on, same
+// as the split windows.
+const TRANSITION_LEAD = 2; // frames before the cut — flash & glitch
+const TRANSITION_LEN = 7; // total, ~230ms at 30fps — flash & glitch
+const LIGHTLEAK_LEAD = 5; // light-leak is slower/more organic, wider window
+const LIGHTLEAK_LEN = 16; // ~530ms at 30fps
 
-const CutFlashes: React.FC<{items: CutFlash[]}> = ({items}) => {
+const DEFAULT_TRANSITION_SFX: Record<string, string> = {
+  flash: 'cut-click.mp3',
+  glitch: 'glitch.mp3',
+  lightleak: 'lightleak.mp3',
+};
+
+// Deterministic pseudo-random in [0,1) — NEVER Math.random() here. Remotion
+// can render frames out of order or in parallel chunks, so anything that
+// looks "random" must be a pure function of a frame-derived seed or it
+// visibly reshuffles between preview and render (same rule as the scatter
+// caption's word placement).
+const hash01 = (n: number) => {
+  const x = Math.sin(n * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+const CutTransitions: React.FC<{items: Transition[]}> = ({items}) => {
   const frame = useCurrentFrame();
   const {fps, width} = useVideoConfig();
 
   const active = items.find((it) => {
+    const type = it.type ?? 'flash';
+    const lead = type === 'lightleak' ? LIGHTLEAK_LEAD : TRANSITION_LEAD;
+    const len = type === 'lightleak' ? LIGHTLEAK_LEN : TRANSITION_LEN;
     const c = Math.round(it.at * fps) + VIDEO_LAG;
-    return frame >= c - FLASH_LEAD && frame < c - FLASH_LEAD + FLASH_LEN;
+    return frame >= c - lead && frame < c - lead + len;
   });
   if (!active) return null;
 
+  const type = active.type ?? 'flash';
   const c = Math.round(active.at * fps) + VIDEO_LAG;
   const k = active.intensity ?? 1;
-  const p = (frame - (c - FLASH_LEAD)) / (FLASH_LEN - 1); // 0..1 pela janela
+  const lead = type === 'lightleak' ? LIGHTLEAK_LEAD : TRANSITION_LEAD;
+  const len = type === 'lightleak' ? LIGHTLEAK_LEN : TRANSITION_LEN;
+  const p = (frame - (c - lead)) / (len - 1); // 0..1 pela janela
 
-  // beam sweeps left→right, brightest as it crosses centre
+  return (
+    <AbsoluteFill style={{pointerEvents: 'none'}}>
+      {type === 'flash' ? <FlashLook frame={frame} c={c} p={p} k={k} width={width} /> : null}
+      {type === 'glitch' ? <GlitchLook c={c} p={p} k={k} width={width} /> : null}
+      {type === 'lightleak' ? <LightLeakLook p={p} k={k} width={width} /> : null}
+      <Sequence from={c} durationInFrames={10} layout="none">
+        <Sfx
+          src={active.sfx ?? DEFAULT_TRANSITION_SFX[type]}
+          volume={active.volume ?? (type === 'lightleak' ? 0.5 : 0.9)}
+        />
+      </Sequence>
+    </AbsoluteFill>
+  );
+};
+
+// ---- flash: the original — a light beam whips across, brightest crossing centre
+const FlashLook: React.FC<{frame: number; c: number; p: number; k: number; width: number}> = ({
+  frame, c, p, k, width,
+}) => {
   const x = interpolate(p, [0, 1], [-1.35 * width, 1.35 * width]);
   const beam = interpolate(p, [0, 0.35, 1], [0, 1 * k, 0], {
     extrapolateLeft: 'clamp',
@@ -112,9 +176,8 @@ const CutFlashes: React.FC<{items: CutFlash[]}> = ({items}) => {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
-
   return (
-    <AbsoluteFill style={{pointerEvents: 'none'}}>
+    <>
       <AbsoluteFill style={{backgroundColor: '#fff', opacity: bloom, mixBlendMode: 'screen'}} />
       <AbsoluteFill style={{overflow: 'hidden'}}>
         <div
@@ -133,10 +196,106 @@ const CutFlashes: React.FC<{items: CutFlash[]}> = ({items}) => {
           }}
         />
       </AbsoluteFill>
-      <Sequence from={c} durationInFrames={10} layout="none">
-        <Sfx src={active.sfx ?? 'cut-click.mp3'} volume={active.volume ?? 0.9} />
-      </Sequence>
-    </AbsoluteFill>
+    </>
+  );
+};
+
+// ---- glitch: a digital stutter for a handful of frames — thin colour-tinted
+// bands jitter horizontally and a noise texture flickers over the top. This
+// is an OVERLAY effect (CustomGraphics sits beside the video layer, not
+// around it) so it cannot literally channel-split the footage; tinted bands
+// in 'difference' blend read as corruption without needing pixel access.
+// Every jitter/visibility value is hashed off (cut frame, band, sub-step) —
+// deterministic, see hash01 above.
+const GLITCH_BANDS = 5;
+const GLITCH_STEPS = 6; // discrete stutter steps across the window — no easing, glitches don't ease
+const GlitchLook: React.FC<{c: number; p: number; k: number; width: number}> = ({c, p, k, width}) => {
+  if (p < 0 || p > 1) return null;
+  const step = Math.min(GLITCH_STEPS - 1, Math.floor(p * GLITCH_STEPS));
+  const bandH = 1920 / GLITCH_BANDS;
+  const tints = ['#37f2ff', '#ff3ba0', '#ffe94d'];
+  const noiseOpacity = interpolate(p, [0, 0.15, 0.85, 1], [0, 0.5 * k, 0.5 * k, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  return (
+    <>
+      <AbsoluteFill style={{overflow: 'hidden'}}>
+        {Array.from({length: GLITCH_BANDS}).map((_, i) => {
+          const seed = c * 97 + i * 13 + step * 31;
+          const show = hash01(seed + 5) > 0.35; // a given band skips some steps
+          if (!show) return null;
+          const jitter = (hash01(seed) - 0.5) * 2 * 46 * k; // px
+          return (
+            <div
+              key={i}
+              style={{
+                position: 'absolute',
+                top: i * bandH,
+                left: 0,
+                width,
+                height: bandH,
+                transform: `translateX(${jitter.toFixed(1)}px)`,
+                background: tints[i % tints.length],
+                opacity: 0.22,
+                mixBlendMode: 'difference',
+              }}
+            />
+          );
+        })}
+      </AbsoluteFill>
+      <AbsoluteFill style={{opacity: noiseOpacity, mixBlendMode: 'overlay'}}>
+        <Img src={staticFile('fx/noise.png')} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+      </AbsoluteFill>
+    </>
+  );
+};
+
+// ---- lightleak: a slower, warm radial sweep with grain — organic, not a
+// hard cut accent. Same interpolate/AbsoluteFill/blend-mode technique as
+// flash, just amber and a wider window (LIGHTLEAK_LEAD/LEN above).
+const LightLeakLook: React.FC<{p: number; k: number; width: number}> = ({p, k, width}) => {
+  const cx = interpolate(p, [0, 1], [-0.15, 1.15]) * width;
+  const glow = interpolate(p, [0, 0.4, 1], [0, 0.85 * k, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  const grain = interpolate(p, [0, 0.3, 0.7, 1], [0, 0.18 * k, 0.18 * k, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  return (
+    <>
+      <AbsoluteFill
+        style={{
+          background: `radial-gradient(circle at ${cx.toFixed(0)}px 30%, rgba(255,178,84,0.95) 0%, rgba(255,120,40,0.55) 22%, rgba(255,120,40,0) 60%)`,
+          opacity: glow,
+          mixBlendMode: 'screen',
+        }}
+      />
+      <AbsoluteFill style={{opacity: grain, mixBlendMode: 'overlay'}}>
+        <Img src={staticFile('fx/noise.png')} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+      </AbsoluteFill>
+    </>
+  );
+};
+
+// ============ GENERIC SFX PLACEMENT ===========================================
+// Any pack sound at any moment in the edit, without touching this file per
+// project — `sfxCues` in edit-data.json. See the SfxCue type above.
+const SfxCues: React.FC<{items: SfxCue[]}> = ({items}) => {
+  const {fps} = useVideoConfig();
+  return (
+    <>
+      {items.map((cue, i) => {
+        const c = Math.round(cue.at * fps) + VIDEO_LAG;
+        return (
+          <Sequence key={i} from={c} durationInFrames={60} layout="none">
+            <Sfx src={cue.src} volume={cue.volume} />
+          </Sequence>
+        );
+      })}
+    </>
   );
 };
 

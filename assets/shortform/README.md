@@ -76,6 +76,15 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
   "splitInserts": [                  // STYLE "tela dividida" — see below
     {"src": "brand/logo.jpg", "start": 11.64, "end": 14.73, "fit": "cover", "bandH": 750}
   ],
+  "transitions": [                   // cut transitions — "Transição" on the Estilo tab
+    {"at": 11.7, "type": "flash"}    // "flash" (default if type omitted) | "glitch" | "lightleak"
+    // optional per entry: "intensity" (default 1), "sfx" (overrides the type's
+    // signature sound), "volume". One per moment the layout/beat changes, not
+    // per cut — see references/shortform.md for placement + per-type tuning.
+  ],
+  "sfxCues": [                       // any pack sound at any moment, no code change
+    {"at": 6.4, "src": "riser.mp3", "volume": 0.5}   // src is a public/sfx/*.mp3 filename
+  ],
   "soundtrack": {"enabled": false, "file": "trilha.mp3", "volume": 0.0445}
   // Phase 3 flips soundtrack.enabled to true once trilha.mp3 exists
 }
@@ -110,7 +119,11 @@ Then copy `cut.mp4` into `public/` and generate the data files below.
 
 `npx remotion render Reels out/render.mp4`, loudnorm → `edit/final.mp4`.
 Verify stills at cut boundaries (no black edges) before the full render.
-`generate_sfx.py` regenerates the sfx pack if ever needed.
+`generate_sfx.py` regenerates the sfx pack if ever needed (run with no args to
+add missing sounds only — `--all` also re-rolls the already-tuned whoosh/pop/
+click, which changes their exact audio since they're noise-based and unseeded).
+`generate_fx.py` regenerates `public/fx/noise.png` (the glitch/light-leak grain
+texture) if ever needed — this one IS seeded, so re-running is a no-op.
 
 
 ## Style: "TELA DIVIDIDA" (split screen)

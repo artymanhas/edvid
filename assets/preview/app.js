@@ -163,6 +163,17 @@ const STYLE_CATALOG = {
     {id: 'classica', name: 'Clássica', stat: 'classica'},
     {id: 'none', name: 'Nenhum', none: true},
   ],
+  // Single-select, same shape as edits/headlines/captions — a video reads as
+  // edited when its cuts are consistent, not when every cut tries a different
+  // trick. `flashCut` used to live as a plain checkbox here; folded into this
+  // group when 'glitch'/'lightleak' were added (2026-09-04) — old projects
+  // that never set `transition` still default to `none`, same as before.
+  transitions: [
+    {id: 'none', name: 'Nenhuma', none: true},
+    {id: 'flash', name: 'Flash', trans: 'flash'},
+    {id: 'glitch', name: 'Glitch', trans: 'glitch'},
+    {id: 'lightleak', name: 'Vazamento de luz', trans: 'lightleak'},
+  ],
   elements: [
     {
       id: 'tracking',
@@ -181,12 +192,6 @@ const STYLE_CATALOG = {
       name: 'Zoom in e out nos cortes',
       def: true,
       icon: '<svg viewBox="0 0 16 16"><rect x="1.2" y="3.4" width="6" height="9.2" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9.6" y="1.9" width="5.2" height="12.2" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8.4 8h.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
-    },
-    {
-      id: 'flashCut',
-      name: 'Flash na transição',
-      def: false,
-      icon: '<svg viewBox="0 0 16 16"><path d="M3 13.2L13 3.2" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" fill="none"/><path d="M6.6 14L9.4 11.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/><path d="M6.6 4.8L3.8 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/></svg>',
     },
     {
       id: 'musicAI',
@@ -584,6 +589,79 @@ function buildStaticDemo(host, id) {
 
 const CAP_BUILDERS = { karaoke: buildKaraokeDemo, stacked: buildStackedDemo, scatter: buildScatterDemo };
 
+/* ---- transition previews: mirror CutTransitions in CustomGraphics.tsx -------
+ * Same three looks, same relative geometry/timing as the render (TRANSITION_LEN
+ * / LIGHTLEAK_LEN at the template's reference 30fps) — a hold, then the cut
+ * effect, on loop. Change one, change both — same rule as the caption demos. */
+function buildFlashTransDemo(host) {
+  host.innerHTML = '';
+  const wrap = el('div', 'trans-demo', host);
+  const bloom = el('div', 'trans-fx trans-bloom', wrap);
+  const beam = el('div', 'trans-fx trans-beam', wrap);
+  const HOLD = 1.05, LEN = 7 / FPS_REF; // TRANSITION_LEN
+  const cycle = HOLD + LEN;
+  return (now) => {
+    const t = now % cycle;
+    if (t >= LEN) { bloom.style.opacity = 0; beam.style.opacity = 0; return; }
+    const p = t / LEN;
+    const w = host.clientWidth;
+    beam.style.transform = `translateX(${((-0.68 + p * 1.36) * w).toFixed(1)}px) rotate(-18deg)`;
+    beam.style.opacity = String(p < 0.35 ? p / 0.35 : (1 - p) / 0.65);
+    bloom.style.opacity = String(Math.max(0, 0.55 * (1 - Math.abs(p - 0.14) * 4)));
+  };
+}
+
+function buildGlitchTransDemo(host) {
+  host.innerHTML = '';
+  const wrap = el('div', 'trans-demo', host);
+  const BANDS = 5;
+  const bands = Array.from({length: BANDS}, (_, i) => {
+    const b = el('div', 'trans-fx trans-band', wrap);
+    b.style.top = `${(i * 100) / BANDS}%`;
+    b.style.height = `${100 / BANDS}%`;
+    b.style.background = ['#37f2ff', '#ff3ba0', '#ffe94d'][i % 3];
+    return b;
+  });
+  const HOLD = 1.0, LEN = 7 / FPS_REF, STEPS = 6; // TRANSITION_LEN / GLITCH_STEPS
+  const cycle = HOLD + LEN;
+  return (now) => {
+    const t = now % cycle;
+    if (t >= LEN) { bands.forEach((b) => (b.style.opacity = 0)); return; }
+    const step = Math.min(STEPS - 1, Math.floor((t / LEN) * STEPS));
+    bands.forEach((b, i) => {
+      // same hash formula as hash01() in CustomGraphics.tsx, just inlined
+      const seed = Math.sin((i * 13 + step * 31) * 12.9898) * 43758.5453;
+      const r = seed - Math.floor(seed);
+      const show = r > 0.35;
+      b.style.opacity = show ? '0.5' : '0';
+      b.style.transform = `translateX(${((r - 0.5) * 40).toFixed(1)}px)`;
+    });
+  };
+}
+
+function buildLightleakTransDemo(host) {
+  host.innerHTML = '';
+  const wrap = el('div', 'trans-demo', host);
+  const glow = el('div', 'trans-fx trans-glow', wrap);
+  const HOLD = 0.6, LEN = 16 / FPS_REF; // LIGHTLEAK_LEN
+  const cycle = HOLD + LEN;
+  return (now) => {
+    const t = now % cycle;
+    if (t >= LEN) { glow.style.opacity = 0; return; }
+    const p = t / LEN;
+    const w = host.clientWidth;
+    const cx = (-0.15 + p * 1.3) * w;
+    glow.style.background = `radial-gradient(circle at ${cx.toFixed(0)}px 30%, rgba(255,178,84,.95) 0%, rgba(255,120,40,.55) 22%, rgba(255,120,40,0) 60%)`;
+    glow.style.opacity = String(p < 0.4 ? p / 0.4 : (1 - p) / 0.6);
+  };
+}
+
+const TRANS_BUILDERS = {
+  flash: buildFlashTransDemo,
+  glitch: buildGlitchTransDemo,
+  lightleak: buildLightleakTransDemo,
+};
+
 const LABEL_W = 48; // .track-label width (content x offset of lanes)
 const MIN_SEG = 0.2; // s
 const THUMB_EVERY = 2.0;
@@ -624,6 +702,7 @@ function defaultStyle() {
     edit: STYLE_CATALOG.edits[0].id,
     headline: STYLE_CATALOG.headlines[0].id,
     captions: STYLE_CATALOG.captions[0].id,
+    transition: STYLE_CATALOG.transitions[0].id,
     accent: ACCENT_DEFAULT,
     elements,
     note: '',
@@ -789,6 +868,11 @@ async function applyState(data) {
   // session) shows what is actually rendered — not a stale local selection
   S.style = { ...defaultStyle(), ...(S.state.style || {}) };
   S.style.elements = { ...defaultStyle().elements, ...((S.state.style || {}).elements || {}) };
+  // migrate a pre-2026-09-04 project: `flashCut` used to be a plain checkbox,
+  // now folded into the `transition` group — an old saved pick should still
+  // come back as "Flash", not silently revert to "Nenhuma"
+  if (!(S.state.style || {}).transition && S.style.elements.flashCut) S.style.transition = 'flash';
+  delete S.style.elements.flashCut;
   $('setupNote').value = S.style.note || '';
   // the skill opened the gate → land the user on the Estilo tab
   if (S.state.awaitingStyle) S.tab = 'style';
@@ -1161,9 +1245,11 @@ function updateAccentNote() {
 function updateSummary() {
   const on = STYLE_CATALOG.elements.filter((e) => S.style.elements[e.id]);
   const accentBit = accentUsed() ? ` · destaque ${accentName(S.style.accent)}` : '';
+  const transBit = S.style.transition && S.style.transition !== 'none'
+    ? ` · transição ${styleName('transitions', S.style.transition)}` : '';
   $('setupSummary').textContent =
     `${styleName('edits', S.style.edit)} · headline ${styleName('headlines', S.style.headline)}` +
-    ` · legenda ${styleName('captions', S.style.captions)}${accentBit} · ` +
+    ` · legenda ${styleName('captions', S.style.captions)}${accentBit}${transBit} · ` +
     (on.length ? on.map((e) => e.name).join(', ') : 'sem elementos extras');
 }
 
@@ -1208,6 +1294,7 @@ function renderSetup() {
       const kind = o.mock ? 'frame' : (o.hl || o.hlbox) ? 'cap hlbox' : 'cap';
       const prev = el('div', `opt-preview ${kind}`, card);
       if (o.demo) capAnims.push(CAP_BUILDERS[o.demo](prev));
+      else if (o.trans) capAnims.push(TRANS_BUILDERS[o.trans](prev));
       else if (o.hl) buildHeadlineDemo(prev, o.hl);
       else if (o.stat) {
         const step = buildStaticDemo(prev, o.stat);
@@ -1216,8 +1303,10 @@ function renderSetup() {
       else if (o.none) prev.innerHTML = NONE_MARK;
       else prev.innerHTML = o.mock || '';
       // Only the abstract mockups get a title. A card that renders the real
-      // caption or the real headline is already labelled — by itself.
-      if (o.mock || o.none) el('div', 'opt-name', card).textContent = o.name;
+      // caption or the real headline is already labelled — by itself. The
+      // transition demos are an abstract effect too (no text on screen), so
+      // they need the title exactly like the edit-style mockups do.
+      if (o.mock || o.none || o.trans) el('div', 'opt-name', card).textContent = o.name;
       el('div', 'opt-mark', card);
     }
     // the ghost only earns its space where there is a single option to explain
@@ -1230,6 +1319,7 @@ function renderSetup() {
   radios($('optEdit'), 'edits', S.style.edit);
   radios($('optHeadline'), 'headlines', S.style.headline);
   radios($('optCaptions'), 'captions', S.style.captions);
+  radios($('optTransition'), 'transitions', S.style.transition);
   renderAccents();
 
   const host = $('optElements');
@@ -1252,7 +1342,7 @@ $('styleSetup').addEventListener('click', (e) => {
   if (e.target.closest('#optAccent')) return;
   const opt = e.target.closest('.opt:not(.ghost)');
   if (opt) {
-    const key = {edits: 'edit', headlines: 'headline', captions: 'captions'}[opt.dataset.group];
+    const key = {edits: 'edit', headlines: 'headline', captions: 'captions', transitions: 'transition'}[opt.dataset.group];
     S.style[key] = opt.dataset.id;
     renderSetup();
     return;
@@ -1278,6 +1368,8 @@ $('setupGo').addEventListener('click', async () => {
     headlineName: styleName('headlines', S.style.headline),
     captions: S.style.captions,
     captionsName: styleName('captions', S.style.captions),
+    transition: S.style.transition,
+    transitionName: styleName('transitions', S.style.transition),
     accent: S.style.accent,
     accentName: accentName(S.style.accent),
     // whether the picked styles actually paint it — so the skill does not go

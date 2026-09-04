@@ -33,6 +33,19 @@ type Lower = {name: string; title?: string; start: number; dur: number};
 type Chapter = {title: string; start: number; dur?: number};
 type Callout = {text: string; start: number; dur: number; x?: number; y?: number};
 
+// Same shape as the short-form template (CustomGraphics.tsx) — ported
+// 2026-09-04. No VIDEO_LAG/segments.json here: longform has no equivalent cut-
+// frame-accuracy pipeline, so `at`/`start` land on `Math.round(sec * fps)`
+// directly, same as broll/chapters/lowerThirds/callouts above.
+type Transition = {
+  at: number;
+  type?: 'flash' | 'glitch' | 'lightleak';
+  intensity?: number;
+  sfx?: string;
+  volume?: number;
+};
+type SfxCue = {at: number; src: string; volume?: number};
+
 export type EditData = {
   width: number;
   height: number;
@@ -43,6 +56,8 @@ export type EditData = {
   lowerThirds: Lower[];
   chapters: Chapter[];
   callouts: Callout[];
+  transitions?: Transition[];
+  sfxCues?: SfxCue[];
   soundtrack: {enabled: boolean; file: string; volume: number};
 };
 
@@ -135,6 +150,125 @@ const CalloutEl: React.FC<{item: Callout; totalFrames: number}> = ({item, totalF
   );
 };
 
+// ============ CUT TRANSITIONS (ported from short-form CustomGraphics.tsx) =====
+// Same three overlay looks, same trigger mechanism — see references/shortform.md
+// "Transições nos cortes" for the full rationale/tuning notes; this is a direct
+// port, not a reimplementation. No VIDEO_LAG here (see the Transition type above).
+const TRANSITION_LEAD = 2;
+const TRANSITION_LEN = 7;
+const LIGHTLEAK_LEAD = 5;
+const LIGHTLEAK_LEN = 16;
+const DEFAULT_TRANSITION_SFX: Record<string, string> = {
+  flash: 'cut-click.mp3', glitch: 'glitch.mp3', lightleak: 'lightleak.mp3',
+};
+// Deterministic pseudo-random — NEVER Math.random(), Remotion can render
+// frames out of order/in parallel chunks.
+const hash01 = (n: number) => {
+  const x = Math.sin(n * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+const CutTransitions: React.FC<{items: Transition[]}> = ({items}) => {
+  const frame = useCurrentFrame();
+  const {fps, width, height} = useVideoConfig();
+  const active = items.find((it) => {
+    const type = it.type ?? 'flash';
+    const lead = type === 'lightleak' ? LIGHTLEAK_LEAD : TRANSITION_LEAD;
+    const len = type === 'lightleak' ? LIGHTLEAK_LEN : TRANSITION_LEN;
+    const c = Math.round(it.at * fps);
+    return frame >= c - lead && frame < c - lead + len;
+  });
+  if (!active) return null;
+  const type = active.type ?? 'flash';
+  const c = Math.round(active.at * fps);
+  const k = active.intensity ?? 1;
+  const lead = type === 'lightleak' ? LIGHTLEAK_LEAD : TRANSITION_LEAD;
+  const len = type === 'lightleak' ? LIGHTLEAK_LEN : TRANSITION_LEN;
+  const p = (frame - (c - lead)) / (len - 1);
+
+  return (
+    <AbsoluteFill style={{pointerEvents: 'none'}}>
+      {type === 'flash' ? (
+        <>
+          <AbsoluteFill style={{
+            backgroundColor: '#fff',
+            opacity: interpolate(frame, [c - 1, c, c + 2], [0, 0.5 * k, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}),
+            mixBlendMode: 'screen',
+          }} />
+          <AbsoluteFill style={{overflow: 'hidden'}}>
+            <div style={{
+              position: 'absolute', top: '-30%', left: 0, width: width * 0.46, height: '160%',
+              transform: `translateX(${interpolate(p, [0, 1], [-1.35 * width, 1.35 * width]).toFixed(1)}px) rotate(-18deg)`,
+              background: 'linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,0.95) 50%,rgba(255,255,255,0) 100%)',
+              opacity: interpolate(p, [0, 0.35, 1], [0, 1 * k, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}),
+              mixBlendMode: 'screen', filter: 'blur(16px)',
+            }} />
+          </AbsoluteFill>
+        </>
+      ) : null}
+      {type === 'glitch' ? (
+        <>
+          <AbsoluteFill style={{overflow: 'hidden'}}>
+            {Array.from({length: 5}).map((_, i) => {
+              const bandH = height / 5;
+              const step = Math.min(5, Math.floor(p * 6));
+              const seed = c * 97 + i * 13 + step * 31;
+              if (!(hash01(seed + 5) > 0.35)) return null;
+              const jitter = (hash01(seed) - 0.5) * 2 * 46 * k;
+              return (
+                <div key={i} style={{
+                  position: 'absolute', top: i * bandH, left: 0, width, height: bandH,
+                  transform: `translateX(${jitter.toFixed(1)}px)`,
+                  background: ['#37f2ff', '#ff3ba0', '#ffe94d'][i % 3],
+                  opacity: 0.22, mixBlendMode: 'difference',
+                }} />
+              );
+            })}
+          </AbsoluteFill>
+          <AbsoluteFill style={{
+            opacity: interpolate(p, [0, 0.15, 0.85, 1], [0, 0.5 * k, 0.5 * k, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}),
+            mixBlendMode: 'overlay',
+          }}>
+            <Img src={staticFile('fx/noise.png')} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+          </AbsoluteFill>
+        </>
+      ) : null}
+      {type === 'lightleak' ? (
+        <>
+          <AbsoluteFill style={{
+            background: `radial-gradient(circle at ${(interpolate(p, [0, 1], [-0.15, 1.15]) * width).toFixed(0)}px 30%, rgba(255,178,84,0.95) 0%, rgba(255,120,40,0.55) 22%, rgba(255,120,40,0) 60%)`,
+            opacity: interpolate(p, [0, 0.4, 1], [0, 0.85 * k, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}),
+            mixBlendMode: 'screen',
+          }} />
+          <AbsoluteFill style={{
+            opacity: interpolate(p, [0, 0.3, 0.7, 1], [0, 0.18 * k, 0.18 * k, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}),
+            mixBlendMode: 'overlay',
+          }}>
+            <Img src={staticFile('fx/noise.png')} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+          </AbsoluteFill>
+        </>
+      ) : null}
+      <Sequence from={c} durationInFrames={10} layout="none">
+        <Sfx src={active.sfx ?? DEFAULT_TRANSITION_SFX[type]} volume={active.volume ?? (type === 'lightleak' ? 0.5 : 0.9)} />
+      </Sequence>
+    </AbsoluteFill>
+  );
+};
+
+// ============ GENERIC SFX PLACEMENT (ported from short-form) ==================
+const SfxCues: React.FC<{items: SfxCue[]}> = ({items}) => {
+  const {fps} = useVideoConfig();
+  return (
+    <>
+      {items.map((cue, i) => (
+        <Sequence key={i} from={Math.round(cue.at * fps)} durationInFrames={60} layout="none">
+          <Sfx src={cue.src} volume={cue.volume} />
+        </Sequence>
+      ))}
+    </>
+  );
+};
+
 // ============ SOUNDTRACK (bed) ================================================
 const Soundtrack: React.FC = () => {
   const {durationInFrames} = useVideoConfig();
@@ -177,6 +311,8 @@ export const Main: React.FC = () => {
       {Timed(D.chapters, 2.4, (it, d) => <ChapterCard title={it.title} totalFrames={d} />)}
       {Timed(D.lowerThirds, 4, (it, d) => <LowerThird item={it} totalFrames={d} />)}
       {Timed(D.callouts, 3, (it, d) => <CalloutEl item={it} totalFrames={d} />)}
+      {D.transitions?.length ? <CutTransitions items={D.transitions} /> : null}
+      {D.sfxCues?.length ? <SfxCues items={D.sfxCues} /> : null}
     </AbsoluteFill>
   );
 };

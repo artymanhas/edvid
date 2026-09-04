@@ -801,6 +801,18 @@ kbd {
   .opt-preview.hlbox { height: 56px; }
 }
 
+/* ---- transition demos: mirror CutTransitions in CustomGraphics.tsx (flash/
+   glitch/lightleak) — geometry written by JS each frame (capAnims in app.js).
+   The .opt-preview.cap box already clips + backgrounds dark; these fill it. */
+.trans-demo { position: absolute; inset: 0; }
+.trans-fx { position: absolute; opacity: 0; }
+.trans-beam { top: -30%; left: 0; width: 46%; height: 160%; mix-blend-mode: screen;
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.95) 50%, rgba(255,255,255,0) 100%);
+  filter: blur(5px); }
+.trans-bloom { inset: 0; background: #fff; mix-blend-mode: screen; }
+.trans-band { position: absolute; left: 0; width: 100%; mix-blend-mode: difference; }
+.trans-glow { inset: 0; mix-blend-mode: screen; }
+
 /* ---- caption demos: the template's own styles, not an impression of them ----
    Karaoke: Poppins 900, white, letterSpacing -1, words rise 34px and fade in
    over 7 frames. Stacked: the STACK_MIXED line styles (bold-italic gradient,

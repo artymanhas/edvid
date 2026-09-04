@@ -1,41 +1,137 @@
-"""Synthesize a small royalty-free SFX pack (no external files/licensing).
-Run: uv run python generate.py   → whoosh.wav, pop.wav, click.wav (then mp3)
+"""Synthesize the royalty-free SFX pack (no external files/licensing — every
+sound here is code, same policy as the rest of the project). Writes straight
+into public/sfx/ as .wav, converts each to .mp3 via ffmpeg, deletes the .wav,
+and prints the peak dB of every file (ffmpeg -af volumedetect) so a quiet one
+never ships silently — see references/shortform.md's SFX table for what
+"quiet" broke in the past (click2.mp3 peaked at -25dB, inaudible under speech).
+
+Run: uv run python generate_sfx.py            → only the new sounds (default)
+     uv run python generate_sfx.py --all       → regenerates EVERYTHING,
+       including whoosh/pop/click — these are noise-based and not seeded, so
+       a re-run writes slightly different audio each time. They're already
+       tuned/approved and referenced by exact dB across many client videos
+       (references/shortform.md), so leave them alone unless you mean to
+       re-tune the whole pack on purpose.
 """
-import numpy as np, wave, struct
+import sys
+import numpy as np
+import wave
+import subprocess
+import pathlib
+
 SR = 44100
+OUT = pathlib.Path(__file__).parent / "public" / "sfx"
+OUT.mkdir(parents=True, exist_ok=True)
+REGEN_EXISTING = "--all" in sys.argv
+
 
 def save(name, y):
     y = y / (np.max(np.abs(y)) + 1e-9)
-    y = np.tanh(y * 1.1)                       # soft clip
+    y = np.tanh(y * 1.1)  # soft clip
     pcm = (y * 0.85 * 32767).astype(np.int16)
-    with wave.open(name, "w") as w:
-        w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR)
+    wav_path = OUT / f"{name}.wav"
+    with wave.open(str(wav_path), "w") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SR)
         w.writeframes(pcm.tobytes())
-    print("wrote", name, f"{len(y)/SR:.2f}s")
+    mp3_path = OUT / f"{name}.mp3"
+    subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-i", str(wav_path), "-codec:a", "libmp3lame", "-qscale:a", "2", str(mp3_path)],
+        check=True,
+    )
+    wav_path.unlink()
+    peak = subprocess.run(
+        ["ffmpeg", "-i", str(mp3_path), "-af", "volumedetect", "-f", "null", "-"],
+        capture_output=True, text=True,
+    ).stderr
+    max_line = next((l for l in peak.splitlines() if "max_volume" in l), "max_volume: ?")
+    print(f"wrote {mp3_path.name}  {len(y) / SR:.2f}s  {max_line.strip()}")
 
-def onepole_sweep(x, a):                         # time-varying one-pole lowpass
-    y = np.empty_like(x); prev = 0.0
+
+def onepole_sweep(x, a):  # time-varying one-pole lowpass
+    y = np.empty_like(x)
+    prev = 0.0
     for i in range(len(x)):
-        prev += a[i] * (x[i] - prev); y[i] = prev
+        prev += a[i] * (x[i] - prev)
+        y[i] = prev
     return y
 
-# WHOOSH — filtered noise, cutoff opens then closes, smooth amplitude hump
-n = int(0.45 * SR); t = np.linspace(0, 1, n)
+
+# ============ existing pack (only touched with --all, see docstring) =========
+
+if REGEN_EXISTING:
+    # WHOOSH — filtered noise, cutoff opens then closes, smooth amplitude hump
+    n = int(0.45 * SR); t = np.linspace(0, 1, n)
+    noise = np.random.randn(n)
+    a = 0.02 + 0.38 * np.sin(np.pi * t) ** 1.2  # cutoff low→high→low
+    whoosh = onepole_sweep(noise, a)
+    env = np.sin(np.pi * t) ** 1.4
+    save("whoosh", whoosh * env)
+
+    # POP — short tonal blip with a pitch drop + tiny transient
+    n = int(0.14 * SR); t = np.linspace(0, 0.14, n)
+    f = 680 * np.exp(-t * 7)  # 680→~250 Hz
+    tone = np.sin(2 * np.pi * np.cumsum(f) / SR)
+    trans = np.random.randn(n) * np.exp(-t * 120) * 0.4
+    pop = (tone + trans) * np.exp(-t * 26)
+    save("pop", pop)
+
+    # CLICK — very short transient
+    n = int(0.03 * SR); t = np.linspace(0, 0.03, n)
+    click = np.random.randn(n) * np.exp(-t * 260)
+    save("click", click)
+else:
+    print("skipping whoosh/pop/click (already tuned/in production) — pass --all to regenerate them too")
+
+# ============ new pack (2026-09-04 — more SFX for more transitions/cues) ======
+
+# RISER — rising filtered noise + rising tone, crescendo. Tension build-up
+# before a reveal; place via a `sfxCues` entry a beat or two before the payoff.
+n = int(1.2 * SR); t = np.linspace(0, 1, n)
 noise = np.random.randn(n)
-a = 0.02 + 0.38 * np.sin(np.pi * t) ** 1.2       # cutoff low→high→low
-whoosh = onepole_sweep(noise, a)
-env = np.sin(np.pi * t) ** 1.4
-save("whoosh.wav", whoosh * env)
+a = 0.01 + 0.5 * (t ** 1.6)  # cutoff climbs low -> high, never closes back down
+ris_noise = onepole_sweep(noise, a)
+f = 140 * (1 + 5.5 * t ** 1.8)  # ~140 -> ~910Hz glide up
+tone = np.sin(2 * np.pi * np.cumsum(f) / SR) * 0.5
+env = t ** 1.3  # crescendo, no decay — the payoff SFX (impact/ding) takes over
+save("riser", (ris_noise * 0.8 + tone) * env)
 
-# POP — short tonal blip with a pitch drop + tiny transient
-n = int(0.14 * SR); t = np.linspace(0, 0.14, n)
-f = 680 * np.exp(-t * 7)                          # 680→~250 Hz
-tone = np.sin(2 * np.pi * np.cumsum(f) / SR)
-trans = np.random.randn(n) * np.exp(-t * 120) * 0.4
-pop = (tone + trans) * np.exp(-t * 26)
-save("pop.wav", pop)
+# IMPACT — sub thump + sharp transient, for bold text/stat reveals
+n = int(0.35 * SR); t = np.linspace(0, 0.35, n)
+sub = np.sin(2 * np.pi * 55 * t) * np.exp(-t * 9)
+crack = np.random.randn(n) * np.exp(-t * 180) * 0.6
+mid = np.sin(2 * np.pi * 180 * t) * np.exp(-t * 14) * 0.5
+save("impact", sub + crack + mid)
 
-# CLICK — very short transient
-n = int(0.03 * SR); t = np.linspace(0, 0.03, n)
-click = np.random.randn(n) * np.exp(-t * 260)
-save("click.wav", click)
+# GLITCH — quantized/stepped noise bursts, digital stutter. Signature SFX for
+# the "glitch" cut transition (CustomGraphics.tsx GlitchLook).
+n = int(0.26 * SR); t = np.linspace(0, 0.26, n)
+raw = np.random.randn(n)
+hold = 10  # sample-and-hold stride — the "bitcrush" sample-rate-reduction feel
+crushed = np.repeat(raw[::hold], hold)[:n]
+crushed = np.round(crushed * 10) / 10  # amplitude quantization
+gate = (np.sin(2 * np.pi * 38 * t) > 0).astype(float)  # choppy on/off gate
+save("glitch", crushed * gate * np.exp(-t * 7))
+
+# LIGHTLEAK — slow warm swell/shimmer. Signature SFX for the "lightleak" cut
+# transition (CustomGraphics.tsx LightLeakLook) — softer/longer than a whoosh.
+n = int(0.9 * SR); t = np.linspace(0, 1, n)
+noise = np.random.randn(n)
+a = 0.015 + 0.09 * np.sin(np.pi * t) ** 1.1
+swell = onepole_sweep(noise, a)
+shimmer = np.sin(2 * np.pi * 1800 * t) * 0.06 * np.sin(np.pi * t)
+save("lightleak", (swell * 0.9 + shimmer) * np.sin(np.pi * t) ** 1.6)
+
+# DING — short two-tone chime/notification, for checkmarks/tips call-outs
+n = int(0.5 * SR); t = np.linspace(0, 0.5, n)
+ding = (np.sin(2 * np.pi * 1046.5 * t) + 0.6 * np.sin(2 * np.pi * 1568 * t)) * np.exp(-t * 7)
+save("ding", ding)
+
+# SHUTTER — camera-shutter double click, for photo-style inserts
+n = int(0.12 * SR); t = np.linspace(0, 0.12, n)
+c1 = np.random.randn(n) * np.exp(-t * 260)
+c2 = np.zeros(n)
+delay = int(0.028 * SR)
+c2[delay:] = np.random.randn(n - delay) * np.exp(-t[: n - delay] * 300) * 0.75
+save("shutter", c1 + c2)

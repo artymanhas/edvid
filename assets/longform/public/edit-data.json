@@ -9,6 +9,8 @@
   "lowerThirds": [],
   "chapters": [],
   "callouts": [],
+  "transitions": [],
+  "sfxCues": [],
   "soundtrack": {
     "enabled": false,
     "file": "trilha.mp3",

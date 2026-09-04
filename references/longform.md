@@ -75,11 +75,36 @@ the four layers — graphics **punctuate, they don't saturate**:
   ("2x mais rápido"). Occasional — NOT karaoke.
 
 Reuse short-form extras sparingly if a moment calls for it (dynamic camera,
-behind-the-subject, SFX) — longform ≠ Reel density. Verify with ONE
+behind-the-subject) — longform ≠ Reel density. Verify with ONE
 `contact_sheet.py` over the graphic moments, render
 `npx remotion render Longform out/render.mp4`, loudnorm → `edit/final.mp4`.
 
 Never edit `src/Main.tsx` — it's data-driven; the JSON is the edit.
+
+## Transições nos cortes + SFX genérico (ported from short-form, 2026-09-04)
+
+Longform has no Estilo tab yet (`STYLE_CATALOG` in `assets/preview/app.js` has
+no longform entries — confirmed in `references/shortform.md`), so **ask in
+chat** instead of pointing at a UI: does a B-roll cutaway or chapter change
+want a cut treatment, and which (flash / glitch / vazamento de luz)? Default
+to none — longform reads as edited through pacing and B-roll, not through cut
+accents; use a transition only where a section genuinely turns.
+
+- **`transitions[]`** — same 3 looks, same schema, same `CutTransitions`
+  component as short-form (ported verbatim into `assets/longform/src/Main.tsx`,
+  which has no separate `CustomGraphics.tsx` file — everything lives in
+  `Main.tsx` here). Full look-by-look tuning notes (lead frames, why glitch is
+  an overlay-only effect, the light-leak pacing) are in
+  `references/shortform.md` under "Transições nos cortes" — read that, this
+  file only notes what differs: **no `VIDEO_LAG`/`segments.json`** here
+  (longform has no equivalent cut-frame-accuracy pipeline), so `at` resolves
+  to `Math.round(at * fps)` directly, same as `broll`/`chapters`/etc above.
+- **`sfxCues[]`** — any `public/sfx/*.mp3` sound at any moment, same generic
+  mechanism as short-form. The full SFX pack (whoosh/pop/click/click1/click2/
+  cut-click/tictac/riser/impact/glitch/lightleak/ding/shutter — see the table
+  in `references/shortform.md`) was copied into
+  `assets/longform/public/sfx/` too, even the short-form-only ones
+  (caption-click/scratch) — harmless to have, only useful if ever wired.
 
 ---
 
@@ -105,6 +130,15 @@ existe.
 ---
 
 ## Helpers de Fase 2/3
+
+**`chapters.py`** (capítulos pro YouTube) · **`captions_srt.py`** (.srt pra CC,
+não queimado) · **`treblo_music.py`** (trilha por IA — mesmo helper do
+short-form, mesma regra: pedir um vibe MUSICAL, não SFX-y) · **`pexels_search.py`**
+/ **`wikimedia_images.py`** / **`google_images.py`** (broll ilustrativo, mesmas
+regras do short-form) · `generate_sfx.py` / `generate_fx.py` (no
+`assets/shortform/`, não duplicados aqui — o pack já vem copiado pronto em
+`assets/longform/public/sfx/` e `public/fx/`; só rode os geradores de novo lá
+se precisar regenerar algo).
 
 ---
 
