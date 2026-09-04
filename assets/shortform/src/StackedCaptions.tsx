@@ -38,6 +38,22 @@ loadPlayfair('normal', {weights: ['700', '900']});
 const PLAYFAIR = playfair.fontFamily;
 
 const ORANGE = '#ff5200';
+
+// -------- config (optional overrides in edit-data.json → captions) --------
+// Declared before LINE_STYLES: ACCENT is used inside that array literal, and a
+// `const` cannot be referenced before its own declaration runs (TDZ) even at
+// module scope.
+type SfxCfg = {enabled?: boolean; clickVolume?: number; scratchVolume?: number};
+type CapCfg = {stackedOffsetY?: number; fontScale?: number; sfx?: SfxCfg; accent?: string};
+const CAP = ((editData as {captions?: CapCfg}).captions ?? {}) as CapCfg;
+const OFFSET_Y = CAP.stackedOffsetY ?? 0.156; // fraction of height, below center
+const FONT_SCALE = CAP.fontScale ?? 0.8;
+const ACCENT = CAP.accent ?? ORANGE; // Estilo tab colour pick, falls back to the default
+const SFX = CAP.sfx ?? {};
+const SFX_ON = SFX.enabled !== false;
+const CLICK_VOL = SFX.clickVolume ?? 0.45;
+const SCRATCH_VOL = SFX.scratchVolume ?? 0.16;
+
 const WHITE_GRAD: React.CSSProperties = {
   backgroundImage: 'linear-gradient(180deg, #ffffff 0%, #ffffff 46%, #cfcfcf 100%)',
   WebkitBackgroundClip: 'text',
@@ -45,11 +61,11 @@ const WHITE_GRAD: React.CSSProperties = {
   WebkitTextFillColor: 'transparent',
   color: 'transparent',
 };
-// 0=bold-italic, 1=regular(small), 2=serif-orange, 3=bold
+// 0=bold-italic, 1=regular(small), 2=serif-accent, 3=bold
 const LINE_STYLES: React.CSSProperties[] = [
   {fontFamily: POPPINS, fontWeight: 900, fontStyle: 'italic', ...WHITE_GRAD},
   {fontFamily: POPPINS, fontWeight: 400, fontStyle: 'normal', ...WHITE_GRAD},
-  {fontFamily: PLAYFAIR, fontWeight: 900, fontStyle: 'italic', color: ORANGE},
+  {fontFamily: PLAYFAIR, fontWeight: 900, fontStyle: 'italic', color: ACCENT},
   {fontFamily: POPPINS, fontWeight: 800, fontStyle: 'normal', ...WHITE_GRAD},
 ];
 const SHADOW = 'drop-shadow(0 5px 9px rgba(0,0,0,0.5))';
@@ -63,17 +79,6 @@ const fitFont = (text: string, base: number, avail = 900, factor = 0.59): number
   const est = n * base * factor;
   return est > avail ? Math.floor(avail / (n * factor)) : base;
 };
-
-// -------- config (optional overrides in edit-data.json → captions) --------
-type SfxCfg = {enabled?: boolean; clickVolume?: number; scratchVolume?: number};
-type CapCfg = {stackedOffsetY?: number; fontScale?: number; sfx?: SfxCfg};
-const CAP = ((editData as {captions?: CapCfg}).captions ?? {}) as CapCfg;
-const OFFSET_Y = CAP.stackedOffsetY ?? 0.156; // fraction of height, below center
-const FONT_SCALE = CAP.fontScale ?? 0.8;
-const SFX = CAP.sfx ?? {};
-const SFX_ON = SFX.enabled !== false;
-const CLICK_VOL = SFX.clickVolume ?? 0.45;
-const SCRATCH_VOL = SFX.scratchVolume ?? 0.16;
 
 type Word = {text: string; fromMs: number; toMs: number};
 type CueData = {

@@ -512,7 +512,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
             <div
               key={i}
               style={{
-                background: '#ff5200',
+                background: H.accent ?? '#ff5200',
                 color: '#fff',
                 fontWeight: 900,
                 fontSize: size,
@@ -535,7 +535,7 @@ const HookInner: React.FC<{totalFrames: number}> = ({totalFrames}) => {
         <Sfx src="whoosh.mp3" volume={0.1} />
         <div style={{...shell, filter: 'drop-shadow(0 6px 16px rgba(0,0,0,0.55))'}}>
           <div style={{fontWeight: 400, fontSize: size, color: '#fff'}}>{lines[0]}</div>
-          <div style={{fontWeight: 900, fontSize: size, color: '#ff5200'}}>{lines[1]}</div>
+          <div style={{fontWeight: 900, fontSize: size, color: H.accent ?? '#ff5200'}}>{lines[1]}</div>
         </div>
       </AbsoluteFill>
     );

@@ -20,7 +20,9 @@ dependencies = [
     # thing to install. It pulls torch + faster-whisper (~2GB of wheels), and
     # downloads a Whisper model plus a per-language wav2vec2 alignment model on
     # first run. That weight is the price of a keyless install.
-    "whisperx",
+    "whisperx>=3.8.4",
+    "torch>=2.8.0,<2.9.dev0",
+    "torchaudio>=2.8.0,<2.9.dev0",
     # Editing from a URL (ingest_url.py). A dependency and not a system package
     # on purpose: as an "optional" brew/winget install nobody had it, so the
     # feature looked broken to anyone who pasted a link. In the venv it is always
@@ -41,6 +43,17 @@ matting = ["torch", "torchvision"]
 # dependency exists — see edvid_install.py.
 [project.scripts]
 edvid-install = "edvid_install:main"
+
+# Force CUDA builds of PyTorch (RTX 2060)
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [build-system]
 requires = ["setuptools>=61.0"]

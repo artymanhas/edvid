@@ -62,3 +62,12 @@ project.md
 
 # Personal, per-creator templates (never committed — each user builds their own)
 templates/
+
+# Local-only: client project data and notes that ended up inside the skill
+# checkout instead of <videos_dir>/edit/ (never meant to be shared/pushed —
+# real client footage and business info live here, sometimes many GB of it)
+/EDITA PRA MIM/
+/clients/
+/references/notas-projeto/
+/.claude/
+/trilha.mp3
