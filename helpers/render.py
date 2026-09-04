@@ -58,6 +58,53 @@ SUB_FORCE_STYLE = (
     "Alignment=2,MarginV=90"
 )
 
+
+# -------- Video encoder: GPU (NVENC) when available, CPU (libx264) as the
+# only fallback ----------------------------------------------------------
+#
+# Eduardo's rule: always use the GPU. Confirmed working on his RTX 2060
+# (`ffmpeg -encoders | grep nvenc` lists h264_nvenc/hevc_nvenc/av1_nvenc, and
+# a smoke encode succeeds). `-rc vbr -cq <N> -b:v 0` is CQ (quality-target)
+# mode — the `-b:v 0` matters: without it some ffmpeg/driver combos apply a
+# default bitrate CAP that fights the quality target and silently caps
+# quality below what -cq asks for. NVENC's `p1..p7` preset scale (1=fastest,
+# 7=slowest/best) is NOT the same curve as libx264's named presets — p4 is
+# NVIDIA's own "default"/balanced point, not a speed match to x264 "medium".
+import functools
+
+
+@functools.lru_cache(maxsize=1)
+def _has_nvenc() -> bool:
+    try:
+        out = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True, text=True, timeout=10,
+        ).stdout
+        return "h264_nvenc" in out
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+# quality name -> (nvenc preset, nvenc cq, libx264 preset, libx264 crf)
+_QUALITY_LADDER = {
+    "draft": ("p1", "28", "ultrafast", "28"),
+    "preview": ("p4", "22", "medium", "22"),
+    "final": ("p5", "20", "fast", "20"),
+    "composite": ("p6", "18", "fast", "18"),  # the final overlay/subtitles pass
+}
+
+
+def video_encoder_args(quality: str) -> list[str]:
+    """`-c:v ...` + rate-control flags for one rung of the quality ladder.
+    Picks NVENC when this machine has it, libx264 otherwise — never silently
+    drops to CPU just because it's simpler; only when the GPU genuinely
+    isn't there."""
+    nvenc_preset, cq, x264_preset, crf = _QUALITY_LADDER[quality]
+    if _has_nvenc():
+        return ["-c:v", "h264_nvenc", "-preset", nvenc_preset,
+                "-rc", "vbr", "-cq", cq, "-b:v", "0"]
+    return ["-c:v", "libx264", "-preset", x264_preset, "-crf", crf]
+
 # -------- Helpers ------------------------------------------------------------
 
 
@@ -271,10 +318,11 @@ def extract_segment(
     `-ss` before `-i` for fast accurate seeking. Scale to 1080p from 4K.
     Portrait sources (height > width) are scaled by height to preserve orientation.
 
-    Quality ladder:
-      - final (default): 1080p libx264 fast CRF 20
-      - preview:         1080p libx264 medium CRF 22 (evaluable for QC)
-      - draft:           720p libx264 ultrafast CRF 28 (cut-point check only)
+    Quality ladder (GPU/NVENC — see NVENC_ENCODER, always use the GPU on
+    machines that have one; confirmed working on Eduardo's RTX 2060):
+      - final (default): 1080p h264_nvenc p5 CQ 20
+      - preview:         1080p h264_nvenc p4 CQ 22 (evaluable for QC)
+      - draft:           720p h264_nvenc p1 CQ 28 (cut-point check only, fastest preset)
       - keep_resolution: source resolution + source fps (LONGFORM / 16:9 YouTube).
         Skips scaling and does not force 24 fps. Draft/preview still down-scale.
     """
@@ -308,6 +356,14 @@ def extract_segment(
         # `grade.py --candidates` montage.
         vf_parts.append("format=yuv420p")
         vf_parts.append(grade_filter)
+    # `-colorspace`/`-color_primaries`/`-color_trc` as bare OUTPUT flags do not
+    # reliably stick (measured: color_space lands, color_primaries/color_trc
+    # come out "unknown" regardless of encoder — same gotcha already documented
+    # in references/shortform.md for the Remotion delivery step). `setparams`
+    # inside the filter chain is what actually stamps it into the encoded
+    # stream. This runs before every concat/composite `-c:v copy` downstream,
+    # so tagging it once here is enough — copy preserves it end to end.
+    vf_parts.append("setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv")
     vf = ",".join(vf_parts)
 
     # Per-segment level match (whisper/mumble rescue). Applied BEFORE the fades
@@ -325,12 +381,7 @@ def extract_segment(
     af_parts.append(f"afade=t=out:st={fade_out_start:.3f}:d=0.03")
     af = ",".join(af_parts)
 
-    if draft:
-        preset, crf = "ultrafast", "28"
-    elif preview:
-        preset, crf = "medium", "22"
-    else:
-        preset, crf = "fast", "20"
+    quality = "draft" if draft else "preview" if preview else "final"
 
     cmd = [
         "ffmpeg", "-y",
@@ -341,7 +392,7 @@ def extract_segment(
     if streams != "a":
         if vf:
             cmd += ["-vf", vf]
-        cmd += ["-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p"]
+        cmd += video_encoder_args(quality) + ["-pix_fmt", "yuv420p"]
         # Every path above lands on Rec.709 (tonemap for HDR, wide_gamut_chain for
         # BT.2020 SDR, passthrough for the rest), so tag it explicitly. Without this
         # the segments can inherit the source's tags and downstream decoders
@@ -415,8 +466,11 @@ def extract_all_segments(
     Returns the ordered list of segment paths.
 
     Segments are independent, so they encode in PARALLEL (`jobs` ffmpeg
-    processes; 0 = auto ≈ cores/3, capped at 4 — each libx264 already uses
-    several threads). Order is preserved by the seg_NN filenames.
+    processes; 0 = auto ≈ cores/3, capped at 4). With NVENC (the default when
+    a GPU is present — see video_encoder_args) this comfortably fits: tested
+    5 concurrent h264_nvenc sessions on the RTX 2060 with no failures, so the
+    CPU-core-based cap here is conservative, not a GPU bottleneck. Order is
+    preserved by the seg_NN filenames.
 
     If the EDL `grade` is "auto", analyze each segment range with
     `auto_grade_for_clip` and apply a per-segment subtle correction.
@@ -1017,17 +1071,23 @@ def build_final_composite(
         )
         current = next_label
 
-    # Subtitles LAST — Rule 1
+    # Subtitles LAST — Rule 1. setparams right before [outv] either way — same
+    # "bare output flags don't stick" gotcha as the per-segment extraction
+    # above; the base is already tagged correctly, but this re-encode pass
+    # gets its own filter graph, so re-stamp it rather than trust propagation.
     if has_subs:
         subs_abs = str(subtitles_path.resolve()).replace(":", r"\:").replace("'", r"\'")
         filter_parts.append(
-            f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}'[outv]"
+            f"{current}subtitles='{subs_abs}':force_style='{SUB_FORCE_STYLE}',"
+            "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[outv]"
         )
         out_label = "[outv]"
     else:
         # Rename the last overlay output to [outv] for consistency
         if has_overlays:
-            filter_parts.append(f"{current}null[outv]")
+            filter_parts.append(
+                f"{current}setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[outv]"
+            )
             out_label = "[outv]"
         else:
             out_label = "[0:v]"
@@ -1040,7 +1100,7 @@ def build_final_composite(
         "-filter_complex", filter_complex,
         "-map", out_label,
         "-map", "0:a",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+        *video_encoder_args("composite"),
         "-pix_fmt", "yuv420p",
         # keep the Rec.709 tags the segments carry — this pass re-encodes video
         "-colorspace", "bt709", "-color_primaries", "bt709",
@@ -1064,12 +1124,12 @@ def main() -> None:
     ap.add_argument(
         "--preview",
         action="store_true",
-        help="Preview mode: 1080p, medium, CRF 22 — evaluable for QC, faster than final.",
+        help="Preview mode: 1080p, GPU p4/CQ 22 (or CPU medium/CRF 22) — evaluable for QC, faster than final.",
     )
     ap.add_argument(
         "--draft",
         action="store_true",
-        help="Draft mode: 720p, ultrafast, CRF 28 — cut-point verification only.",
+        help="Draft mode: 720p, GPU p1/CQ 28 (or CPU ultrafast/CRF 28) — cut-point verification only.",
     )
     ap.add_argument(
         "--build-subtitles",
