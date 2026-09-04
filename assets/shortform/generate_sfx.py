@@ -135,3 +135,45 @@ c2 = np.zeros(n)
 delay = int(0.028 * SR)
 c2[delay:] = np.random.randn(n - delay) * np.exp(-t[: n - delay] * 300) * 0.75
 save("shutter", c1 + c2)
+
+# ============ pack v3 (2026-09-04b — textures reverse-engineered from a
+# reference CapCut SFX pack Eduardo shared: spectrograms + volumedetect on 3
+# representative files, never the files themselves, to keep the pack
+# code-only/licence-free) ==========================================
+
+# WHOOSH_METALLIC — filtered-noise sweep (like whoosh) + scattered inharmonic
+# high-frequency "pings" ringing on top, for the metallic-shimmer whoosh
+# character the plain whoosh doesn't have.
+n = int(0.55 * SR); t = np.linspace(0, 1, n)
+noise = np.random.randn(n)
+a = 0.03 + 0.42 * np.sin(np.pi * t) ** 1.1
+sweep = onepole_sweep(noise, a)
+_rng = np.random.default_rng(3)
+sparkle = np.zeros(n)
+for _ in range(9):
+    f0 = _rng.uniform(2200, 6200)
+    s = int(_rng.uniform(0.05, 0.85) * n)
+    dur = min(n - s, int(0.09 * SR))
+    tt = np.arange(dur) / SR
+    sparkle[s:s + dur] += np.sin(2 * np.pi * f0 * tt) * np.exp(-tt * 38) * 0.5
+save("whoosh_metallic", sweep * np.sin(np.pi * t) ** 1.3 * 0.85 + sparkle)
+
+# DROP — sustained pulsing sub-bass drop (pitch glides down, amplitude wobbles)
+# — for a bass hit under a big reveal. Distinct from impact.mp3's single quick
+# transient: this sustains ~1.4s.
+n = int(1.4 * SR); t = np.linspace(0, 1.4, n)
+f = 95 * np.exp(-t * 1.1) + 30  # 95Hz -> ~30Hz glide down
+sub = np.sin(2 * np.pi * np.cumsum(f) / SR)
+wobble = 1 + 0.35 * np.sin(2 * np.pi * 7 * t)
+save("drop", (sub * wobble + np.random.randn(n) * 0.15) * np.exp(-t * 1.6))
+
+# RING — a hit/slice transient followed by a long bell-like decaying tail
+# (inharmonic partials, independent decay rates) — a "fancier ding" for a
+# reveal that wants to ring out instead of chime quickly.
+n = int(2.2 * SR); t = np.linspace(0, 2.2, n)
+slice_n = int(0.04 * SR)
+y = np.zeros(n)
+y[:slice_n] += np.random.randn(slice_n) * np.exp(-np.linspace(0, 1, slice_n) * 40)
+for f0, d in zip([880, 1480, 2350, 3120, 4010], [2.2, 3.0, 3.6, 4.2, 5.0]):
+    y += np.sin(2 * np.pi * f0 * t) * np.exp(-t * d) * (0.6 / d)
+save("ring", y)

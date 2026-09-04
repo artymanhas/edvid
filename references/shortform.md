@@ -65,7 +65,15 @@ gain, now −3.1dB).
 | `glitch.mp3` | −3.1dB | 0.26s | glitch transition (default `sfx`) | yes |
 | `lightleak.mp3` | −2.7dB | 0.90s | lightleak transition (default `sfx`) | yes |
 | `ding.mp3` | −3.3dB | 0.50s | — | yes (checkmarks/tips call-outs) |
-| `shutter.mp3` | −6.2dB | 0.12s | — | yes (photo-style inserts) |
+| `shutter.mp3` | −3.3dB | 0.12s | — | yes (photo-style inserts) |
+| `whoosh_metallic.mp3` | −3.2dB | 0.55s | — | yes (brighter/shinier whoosh — a sweep plus scattered high-freq metallic pings) |
+| `drop.mp3` | −3.2dB | 1.40s | — | yes (sustained pulsing sub-bass drop, not a quick transient — under a big reveal) |
+| `ring.mp3` | −2.4dB | 2.20s | — | yes (hit + long bell-like decaying tail — a "ding" that rings out instead of chiming) |
+
+`whoosh_metallic`/`drop`/`ring` were reverse-engineered from a reference CapCut
+SFX pack Eduardo shared (spectrograms + volumedetect on 3 representative
+files) — the textures are recreated in DSP, never the files themselves, to
+keep the pack code-only/licence-free like the rest of it.
 
 `generate_sfx.py` (no args) only adds sounds that don't exist yet; `--all`
 also re-rolls whoosh/pop/click, which are noise-based and unseeded, so a
