@@ -29,3 +29,4 @@ Folders:
 | File | Duração | Pico | Quando usar | Fonte | Licença |
 |---|---|---|---|---|---|
 | whoosh-transition-1-fs427823.mp3 | 0.80s | -5.0 dB | whoosh curto, bom pra transicao de corte ou entrada de card | https://freesound.org/people/Kinoton/sounds/427823/ | CC0 |
+| applause-fixed.mp3 | 2.85s | 0.0 dB | aplauso curto (2.85s, 44.1kHz mono), reveal/payoff de boa noticia -- USAR VIA mix_sfx.py (ffmpeg), nao via sfxCues do Remotion: nesse projeto o sfxCue silenciosamente nao tocou numa composicao densa (trilha+transicoes+legenda empilhada) | https://freesound.org/people/Sadiquecat/sounds/789030/ (reencoded to 44.1kHz mono) | CC0 |

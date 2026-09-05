@@ -714,12 +714,37 @@ skill prompt is resent every turn.
 - Delivering Phase 2 with Remotion's own audio track — it drifts progressively against the source (+0.66s by 78s on a 95s edit). Re-mux `cut.mp4`'s audio and mix the soundtrack in ffmpeg (recipe in the track reference).
 - Judging A/V sync with short correlation windows — speech is quasi-periodic and a 2–3s window happily locks onto the wrong syllable, inventing a drift. Use 15s+ windows, and remember a PARTIAL render cannot show drift that accumulates over the full timeline.
 - Indexing Phase 2 off `Σ(end−start)` when a `jcut_timeline` exists — the J-cut output is shorter, so everything after the first take lands late.
+- **Trusting a `volumedetect` peak as proof one specific sound is present.** It
+  only proves SOMETHING is loud in that window — on a video with continuous
+  speech, that peak is usually just the voice. Measured on this project: an
+  `sfxCue` (`riser.mp3`, then a real applause sample) both showed "normal"
+  peaks in their windows while the applause was, in fact, never playing.
+  **Verify a specific SFX/music placement with a lag-precise cross-correlation
+  against the source file** (short numpy script: correlate the source's PCM
+  against the delivered window's PCM, mono, matched sample rate; a real
+  placement peaks at the exact expected lag — a coincidental voice peak does
+  not). Do this BEFORE telling the user it's fixed, not after they report it
+  missing a third time.
+- A dense composition (soundtrack + transitions + stacked-caption SFX +
+  multiple `sfxCues`) has been observed to silently drop one `<Audio>`
+  element from Remotion's own mix — cause not fully root-caused. If an
+  `sfxCue` verifiably (see above) isn't making it into the render, don't keep
+  fighting the composition: mix it in afterward with `helpers/mix_sfx.py`
+  (ffmpeg, tested, does the `adelay` unit conversion for you — see the next
+  bullet for why that specific conversion is where this bites hardest).
+- **`adelay` takes MILLISECONDS, not samples or seconds** — this bit twice
+  across two different projects' sessions despite being written down here
+  both times. A sample-count passed unconverted (e.g. `599040` meant as 48000
+  Hz samples) is read as 599 seconds, silently pushing the sound minutes past
+  the end of the video; the output truncates before it ever plays, and
+  nothing errors. Use `helpers/mix_sfx.py` instead of hand-writing this
+  filtergraph — it converts seconds correctly in one tested place.
 
 ---
 
 ## Helpers de Fase 2/3
 
-- **`captions_for_remotion.py`** (karaoke JSON) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental) · **`freesound_search.py`** (CC0-only SFX/music search+download, no manual browsing) · **`register_asset.py`** (catalogue a manually-downloaded music/SFX file into `references/asset-library.md`).
+- **`captions_for_remotion.py`** (karaoke JSON) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental) · **`freesound_search.py`** (CC0-only SFX/music search+download, no manual browsing) · **`register_asset.py`** (catalogue a manually-downloaded music/SFX file into `references/asset-library.md`) · **`mix_sfx.py`** (ffmpeg fallback to mix one SFX/music file into an already-rendered video at an exact time — use when an `sfxCue` doesn't survive Remotion's own mix; does the `adelay` ms conversion correctly).
 
 ---
 
