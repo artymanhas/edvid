@@ -177,3 +177,49 @@ y[:slice_n] += np.random.randn(slice_n) * np.exp(-np.linspace(0, 1, slice_n) * 4
 for f0, d in zip([880, 1480, 2350, 3120, 4010], [2.2, 3.0, 3.6, 4.2, 5.0]):
     y += np.sin(2 * np.pi * f0 * t) * np.exp(-t * d) * (0.6 / d)
 save("ring", y)
+
+# ============ pack v5 (2026-09-05 — reveal/payoff reactions) ==================
+
+# APLAUSO — synthesized crowd applause: many short bandpassed noise "claps"
+# scattered under a density envelope (sparse -> dense -> sparse) plus a
+# broadband noise bed underneath so it reads as one crowd, not a drum pattern.
+# For a good-news reveal beat ("você acabou de ganhar...") via `sfxCues` — not
+# baked into any transition. Guarded (unlike the blocks above) so a plain
+# re-run doesn't re-roll it once it exists; add --all to force a re-roll.
+if REGEN_EXISTING or not (OUT / "aplauso.mp3").exists():
+    dur_s = 1.6
+    n = int(dur_s * SR)
+    t_full = np.linspace(0, dur_s, n)
+    _rng = np.random.default_rng(11)
+
+    # broadband bed: bandpass a noise bed (two cascaded one-pole sweeps) under
+    # the discrete claps, swelling in fast then settling over the tail
+    bed_noise = _rng.standard_normal(n)
+    bed = onepole_sweep(bed_noise, np.full(n, 0.35)) - onepole_sweep(bed_noise, np.full(n, 0.06))
+    bed_env = np.clip(t_full / 0.15, 0, 1) * np.exp(-np.clip(t_full - 0.9, 0, None) * 3)
+    bed = bed * bed_env * 0.22
+
+    # discrete claps: crude highpass (diff) on a short noise burst per clap,
+    # onsets drawn from a sparse->dense->sparse density envelope so the swell
+    # reads as a crowd building then settling, not a metronome
+    claps = np.zeros(n)
+    density = lambda x: np.sin(np.pi * np.clip(x, 0, 1)) ** 0.6
+    onsets = []
+    while len(onsets) < 90:
+        cand = _rng.uniform(0, dur_s)
+        if _rng.uniform(0, 1) < density(cand / dur_s):
+            onsets.append(cand)
+    for onset in onsets:
+        s = int(onset * SR)
+        cl_len = min(int(_rng.uniform(0.008, 0.02) * SR), n - s)
+        if cl_len <= 4:
+            continue
+        raw = _rng.standard_normal(cl_len)
+        hp = np.diff(raw, prepend=0.0)  # crude highpass — crisp transient, not a thud
+        tt = np.arange(cl_len) / SR
+        env = np.exp(-tt * _rng.uniform(180, 320))
+        claps[s:s + cl_len] += hp * env * _rng.uniform(0.5, 1.0)
+
+    save("aplauso", bed + claps * 0.9)
+else:
+    print("skipping aplauso (already exists) — pass --all to re-roll it")

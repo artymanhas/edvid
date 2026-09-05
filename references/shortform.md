@@ -40,6 +40,12 @@ approved. Everything here rides on the **data-driven template** at
   `CustomGraphics.tsx`); this is the general-purpose placement, separate from
   each transition's own baked-in signature sound (below).
 
+**Before generating a new SFX or searching Freesound, check
+`references/asset-library.md`** — Eduardo's own downloaded music/SFX (Pixabay,
+Mixkit, YouTube Audio Library, etc.), catalogued with mood/use-case tags. If
+something already there fits, use it (`assets/shortform/public/music/` or
+`.../sfx_sourced/`) instead of generating or searching again.
+
 ### SFX pack (`public/sfx/`) — every file is code, not a download
 
 All procedurally synthesized (`generate_sfx.py`, numpy DSP — no external
@@ -528,7 +534,9 @@ licensing to the user for logos/celebrities). Keep photographer credits.
 
 ## Phase 3 — soundtrack (short-form)
 
-Ask: **AI-generated** (Treblo) or **local file** (copy to `public/trilha.mp3`).
+Ask: **AI-generated** (Treblo), **local file** (copy to `public/trilha.mp3`), or
+check `references/asset-library.md` first for a track Eduardo already sourced
+that fits the mood.
 
 **Writing the Treblo prompt — derive it from the video's context, and ask for
 MUSIC, not a texture.** Read the cut transcript: what's the topic, energy and
@@ -711,7 +719,7 @@ skill prompt is resent every turn.
 
 ## Helpers de Fase 2/3
 
-- **`captions_for_remotion.py`** (karaoke JSON) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
+- **`captions_for_remotion.py`** (karaoke JSON) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental) · **`freesound_search.py`** (CC0-only SFX/music search+download, no manual browsing) · **`register_asset.py`** (catalogue a manually-downloaded music/SFX file into `references/asset-library.md`).
 
 ---
 
@@ -727,6 +735,7 @@ pelo caminho sem chave e diga o que muda.
 | `PEXELS_API_KEY` | imagens/vídeos ilustrativos | Wikimedia Commons cobre a maioria |
 | `GOOGLE_API_KEY` + `GOOGLE_CSE_ID` | marcas, pessoas e logos específicos | Wikimedia é o fallback |
 | `TREBLO_API_KEY` | trilha sonora composta por IA (Fase 3) | trilha só a partir de arquivo local |
+| `FREESOUND_API_KEY` | busca automática de SFX/música CC0 (`freesound_search.py`) | Eduardo baixa manualmente e eu registro com `register_asset.py` |
 
 ### Como o usuário cria a chave do Treblo (trilha com IA)
 
