@@ -22,6 +22,7 @@ Folders:
 
 | File | Duração | Pico | Clima / uso | Fonte | Licença |
 |---|---|---|---|---|---|
+| upbeat-pop-fashion-store-575759.mp3 | 38.40s | -0.6 dB | animado, pop instrumental leve, loja de moda, promo/oferta -- fonte original 38.4s, cortar/fade por video | https://freesound.org/people/code_box/sounds/575759/ | CC0 |
 
 ## SFX
 
