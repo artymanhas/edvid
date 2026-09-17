@@ -23,6 +23,10 @@ Folders:
 | File | Duração | Pico | Clima / uso | Fonte | Licença |
 |---|---|---|---|---|---|
 | upbeat-pop-fashion-store-575759.mp3 | 38.40s | -0.6 dB | animado, pop instrumental leve, loja de moda, promo/oferta -- fonte original 38.4s, cortar/fade por video | https://freesound.org/people/code_box/sounds/575759/ | CC0 |
+| Corporate Harmonics_0.43.mp3 | 43.47s | 0.0 dB | corporativo, institucional, elegante, calmo, curto | Motion Array (item source_772) | Motion Array License (assinatura ativa) |
+| Corporate Harmonics_0.58.mp3 | 58.17s | 0.0 dB | corporativo, institucional, elegante, calmo, medio | Motion Array (item source_772) | Motion Array License (assinatura ativa) |
+| Corporate Harmonics_1.49.mp3 | 109.90s | 0.0 dB | corporativo, institucional, elegante, calmo, longo | Motion Array (item source_772) | Motion Array License (assinatura ativa) |
+| MA_Awesomemusic_ModernInterior.mp3 | 100.00s | 0.0 dB | moderno, interior design, ambiente sofisticado, calmo, minimalista | Motion Array (item source_1144839, MA_Awesomemusic) | Motion Array License (assinatura ativa) |
 
 ## SFX
 
@@ -30,3 +34,4 @@ Folders:
 |---|---|---|---|---|---|
 | whoosh-transition-1-fs427823.mp3 | 0.80s | -5.0 dB | whoosh curto, bom pra transicao de corte ou entrada de card | https://freesound.org/people/Kinoton/sounds/427823/ | CC0 |
 | applause-fixed.mp3 | 2.85s | 0.0 dB | aplauso curto (2.85s, 44.1kHz mono), reveal/payoff de boa noticia -- USAR VIA mix_sfx.py (ffmpeg), nao via sfxCues do Remotion: nesse projeto o sfxCue silenciosamente nao tocou numa composicao densa (trilha+transicoes+legenda empilhada) | https://freesound.org/people/Sadiquecat/sounds/789030/ (reencoded to 44.1kHz mono) | CC0 |
+| cash-register-2-fs794903.mp3 | 1.41s | -0.4 dB | dinheiro, caixa registradora, reveal de preco/oferta | https://freesound.org/people/modusmogulus/sounds/794903/ | CC0 |
