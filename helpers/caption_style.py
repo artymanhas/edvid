@@ -13,6 +13,10 @@ Usage:
     python helpers/caption_style.py --transcript <edit>/transcripts/cut.json \
         -o <edit>/remotion/public/caption-cues.json
     # optional: --lang pt (default) tunes the accent/negation word lists
+    # optional: --emph "padaria,bolo"  extra accent words for THIS video (the serif
+    #           accent line lands on them; EMPH below is tuned for marketing talk)
+    # optional: --solo "bolo,conferir" words that get a cue of their own and the
+    #           pencil circle — only if spoken ≥ MIN_SOLO_MS, else they stay stacked
 """
 from __future__ import annotations
 
@@ -34,6 +38,7 @@ EMPH = {
     "instagram", "whatsapp", "comunidade", "cursos",
 }
 NEG = {"nao", "nunca", "nada", "nem", "jamais"}
+SOLO: set[str] = set()  # filled from --solo: forced solo + circled words
 STOP = {
     "mas", "e", "de", "a", "o", "os", "as", "que", "do", "da", "dos", "das", "para",
     "pra", "com", "em", "no", "na", "um", "uma", "se", "por", "ao", "aos", "eu",
@@ -127,6 +132,9 @@ def group_cues(words: list[dict]) -> list[list[dict]]:
             or (nxt["startMs"] - w["endMs"] > PAUSE_MS)
             or w["text"].endswith(ENDBREAK)
             or len(cur) >= MAX_WORDS
+            # --solo words stand alone: break before and after them
+            or (nxt is not None and norm(nxt["text"]) in SOLO and not too_brief(nxt))
+            or (norm(w["text"]) in SOLO and not too_brief(w))
         )
         if brk:
             cues.append(cur)
@@ -288,7 +296,12 @@ def main() -> None:
     ap.add_argument("--transcript", type=Path, required=True, help="Transcript of the final cut.mp4")
     ap.add_argument("-o", "--output", type=Path, required=True, help="Output caption-cues.json path")
     ap.add_argument("--lang", default="pt", help="Language hint for accent/negation lists (default pt)")
+    ap.add_argument("--emph", default="", help="Comma list of extra accent words for this video")
+    ap.add_argument("--solo", default="", help="Comma list of words forced solo + circled (if spoken >= MIN_SOLO_MS)")
     args = ap.parse_args()
+    extra = {norm(x) for x in args.emph.split(",") if x.strip()}
+    SOLO.update(norm(x) for x in args.solo.split(",") if x.strip())
+    EMPH.update(extra | SOLO)
 
     words = load_words(args.transcript.resolve())
     cues = build_cues(words)
